@@ -16,8 +16,8 @@ class PluginRTCPeerConnectionConstraints {
 		var mandatoryPairArray:[RTCPair] = []
 		var optionalPairArray:[RTCPair] = []
 
-		let mandatoryConstraints = pcConstraints?.objectForKey("mandatory") as? NSDictionary
-		let optionalConstraints = pcConstraints?.objectForKey("optional") as? NSDictionary
+		let mandatoryConstraints = pcConstraints?.object(forKey: "mandatory") as? NSDictionary
+		let optionalConstraints = pcConstraints?.object(forKey: "optional") as? NSDictionary
 
 		if mandatoryConstraints != nil {
 			for (key, value) in mandatoryConstraints! {
