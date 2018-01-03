@@ -110,3 +110,7 @@ function registerGlobals() {
 function dump() {
 	exec(null, null, 'iosrtcPlugin', 'dump', []);
 }
+
+function freeCamera() {
+	exec(null, null, 'iosrtcPlugin', 'freeCamera', []);
+}
