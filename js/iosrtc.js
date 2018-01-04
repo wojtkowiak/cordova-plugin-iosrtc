@@ -58,7 +58,9 @@ module.exports = {
 	debug:                 require('debug'),
 
 	// Debug function to see what happens internally.
-	dump:                  dump
+	dump:                  dump,
+
+	freeCamera:            freeCamera
 };
 
 
