@@ -1,8 +1,8 @@
 /*
- * cordova-plugin-iosrtc v4.0.0
+ * cordova-plugin-iosrtc v4.0.2
  * Cordova iOS plugin exposing the full WebRTC W3C JavaScript APIs
  * Copyright 2015-2017 eFace2Face, Inc. (https://eface2face.com)
- * Copyright 2017 BasqueVoIPMafia (https://github.com/BasqueVoIPMafia)
+ * Copyright 2017-2018 BasqueVoIPMafia (https://github.com/BasqueVoIPMafia)
  * License MIT
  */
 
@@ -188,6 +188,10 @@ MediaStream.create = function (dataFromEvent) {
 	return stream;
 };
 
+
+MediaStream.prototype.getBlobId = function () {
+	return this._blobId;
+};
 
 MediaStream.prototype.getAudioTracks = function () {
 	debug('getAudioTracks()');
@@ -1730,14 +1734,14 @@ RTCPeerConnection.prototype.addIceCandidate = function (candidate) {
 
 	debug('addIceCandidate() | [candidate:%o]', candidate);
 
-	if (!(candidate instanceof RTCIceCandidate)) {
+	if (typeof candidate !== 'object') {
 		if (isPromise) {
 			return new Promise(function (resolve, reject) {
-				reject(new global.DOMError('addIceCandidate() must be called with a RTCIceCandidate instance as first argument'));
+				reject(new global.DOMError('addIceCandidate() must be called with a RTCIceCandidate instance or RTCIceCandidateInit object as argument'));
 			});
 		} else {
 			if (typeof errback === 'function') {
-				errback(new global.DOMError('addIceCandidate() must be called with a RTCIceCandidate instance as first argument'));
+				errback(new global.DOMError('addIceCandidate() must be called with a RTCIceCandidate instance or RTCIceCandidateInit object as argument'));
 			}
 			return;
 		}
@@ -2349,6 +2353,9 @@ function getUserMedia(constraints) {
 		// Get requested video deviceId.
 		if (typeof constraints.video.deviceId === 'string') {
 			newConstraints.videoDeviceId = constraints.video.deviceId;
+		// Also check sourceId (mangled by adapter.js).
+		} else if (typeof constraints.video.sourceId === 'string') {
+			newConstraints.videoDeviceId = constraints.video.sourceId;
 		}
 
 		// Get requested min/max width.
@@ -2488,7 +2495,9 @@ module.exports = {
 	debug:                 _dereq_('debug'),
 
 	// Debug function to see what happens internally.
-	dump:                  dump
+	dump:                  dump,
+
+	freeCamera:            freeCamera
 };
 
 
@@ -2541,6 +2550,10 @@ function dump() {
 	exec(null, null, 'iosrtcPlugin', 'dump', []);
 }
 
+function freeCamera() {
+	exec(null, null, 'iosrtcPlugin', 'freeCamera', []);
+}
+
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
 },{"./MediaStream":3,"./MediaStreamTrack":5,"./RTCIceCandidate":8,"./RTCPeerConnection":9,"./RTCSessionDescription":10,"./enumerateDevices":13,"./getUserMedia":14,"./videoElementsHandler":16,"cordova/exec":undefined,"debug":17,"domready":19}],16:[function(_dereq_,module,exports){
 (function (global){
@@ -2555,7 +2568,8 @@ module.exports.observeVideo = observeVideo;
 /**
  * Dependencies.
  */
-var debug = _dereq_('debug')('iosrtc:videoElementsHandler'),
+var
+	debug = _dereq_('debug')('iosrtc:videoElementsHandler'),
 	MediaStreamRenderer = _dereq_('./MediaStreamRenderer'),
 
 
@@ -2581,8 +2595,7 @@ var debug = _dereq_('debug')('iosrtc:videoElementsHandler'),
 
 	// Video element mutation observer.
 	videoObserver = new MutationObserver(function (mutations) {
-		var i, numMutations, mutation,
-			video;
+		var i, numMutations, mutation, video;
 
 		for (i = 0, numMutations = mutations.length; i < numMutations; i++) {
 			mutation = mutations[i];
@@ -2590,8 +2603,8 @@ var debug = _dereq_('debug')('iosrtc:videoElementsHandler'),
 			// HTML video element.
 			video = mutation.target;
 
-			// .src removed.
-			if (!video.src) {
+			// .src or .srcObject removed.
+			if (!video.src && !video.srcObject) {
 				// If this video element was previously handling a MediaStreamRenderer, release it.
 				releaseMediaStreamRenderer(video);
 				continue;
@@ -2603,7 +2616,8 @@ var debug = _dereq_('debug')('iosrtc:videoElementsHandler'),
 
 	// DOM mutation observer.
 	domObserver = new MutationObserver(function (mutations) {
-		var i, numMutations, mutation,
+		var
+			i, numMutations, mutation,
 			j, numNodes, node;
 
 		for (i = 0, numMutations = mutations.length; i < numMutations; i++) {
@@ -2673,9 +2687,9 @@ var debug = _dereq_('debug')('iosrtc:videoElementsHandler'),
 
 
 function videoElementsHandler(_mediaStreams, _mediaStreamRenderers) {
-	var existingVideos = document.querySelectorAll('video'),
-		i, len,
-		video;
+	var
+		existingVideos = document.querySelectorAll('video'),
+		i, len, video;
 
 	mediaStreams = _mediaStreams;
 	mediaStreamRenderers = _mediaStreamRenderers;
@@ -2715,9 +2729,9 @@ function videoElementsHandler(_mediaStreams, _mediaStreamRenderers) {
 function observeVideo(video) {
 	debug('observeVideo()');
 
-	// If the video already has a src property but is not yet handled by the plugin
+	// If the video already has a src/srcObject property but is not yet handled by the plugin
 	// then handle it now.
-	if (video.src && !video._iosrtcMediaStreamRendererId) {
+	if ((video.src || video.srcObject) && !video._iosrtcMediaStreamRendererId) {
 		handleVideo(video);
 	}
 
@@ -2740,8 +2754,7 @@ function observeVideo(video) {
 		characterDataOldValue: false,
 		// Set to an array of attribute local names (without namespace) if not all attribute mutations
 		// need to be observed.
-		// TODO: Add srcObject, mozSrcObject
-		attributeFilter: ['src']
+		attributeFilter: ['src', 'srcObject']
 	});
 
 	// Intercept video 'error' events if it's due to the attached MediaStream.
@@ -2760,49 +2773,69 @@ function observeVideo(video) {
  */
 
 function handleVideo(video) {
-	var xhr = new XMLHttpRequest();
+	var
+		xhr = new XMLHttpRequest(),
+		stream;
 
-	xhr.open('GET', video.src, true);
-	xhr.responseType = 'blob';
-	xhr.onload = function () {
-		if (xhr.status !== 200) {
-			// If this video element was previously handling a MediaStreamRenderer, release it.
-			releaseMediaStreamRenderer(video);
-
-			return;
-		}
-
-		var reader = new FileReader();
-
-		// Some versions of Safari fail to set onloadend property, some others do not react
-		// on 'loadend' event. Try everything here.
-		try {
-			reader.onloadend = onloadend;
-		} catch (error) {
-			reader.addEventListener('loadend', onloadend);
-		}
-		reader.readAsText(xhr.response);
-
-		function onloadend() {
-			var mediaStreamBlobId = reader.result;
-
-			// The retrieved URL does not point to a MediaStream.
-			if (!mediaStreamBlobId || typeof mediaStreamBlobId !== 'string' || !MEDIASTREAM_ID_REGEXP.test(mediaStreamBlobId)) {
+	// The app has set video.src.
+	if (video.src) {
+		xhr.open('GET', video.src, true);
+		xhr.responseType = 'blob';
+		xhr.onload = function () {
+			if (xhr.status !== 200) {
 				// If this video element was previously handling a MediaStreamRenderer, release it.
 				releaseMediaStreamRenderer(video);
 
 				return;
 			}
 
-			provideMediaStreamRenderer(video, mediaStreamBlobId);
+			var reader = new FileReader();
+
+			// Some versions of Safari fail to set onloadend property, some others do not react
+			// on 'loadend' event. Try everything here.
+			try {
+				reader.onloadend = onloadend;
+			} catch (error) {
+				reader.addEventListener('loadend', onloadend);
+			}
+			reader.readAsText(xhr.response);
+
+			function onloadend() {
+				var mediaStreamBlobId = reader.result;
+
+				// The retrieved URL does not point to a MediaStream.
+				if (!mediaStreamBlobId || typeof mediaStreamBlobId !== 'string' || !MEDIASTREAM_ID_REGEXP.test(mediaStreamBlobId)) {
+					// If this video element was previously handling a MediaStreamRenderer, release it.
+					releaseMediaStreamRenderer(video);
+
+					return;
+				}
+
+				provideMediaStreamRenderer(video, mediaStreamBlobId);
+			}
+		};
+		xhr.send();
+	}
+
+	// The app has set video.srcObject.
+	else if (video.srcObject) {
+		stream = video.srcObject;
+
+		if (!stream.getBlobId()) {
+			// If this video element was previously handling a MediaStreamRenderer, release it.
+			releaseMediaStreamRenderer(video);
+
+			return;
 		}
-	};
-	xhr.send();
+
+		provideMediaStreamRenderer(video, stream.getBlobId());
+	}
 }
 
 
 function provideMediaStreamRenderer(video, mediaStreamBlobId) {
-	var mediaStream = mediaStreams[mediaStreamBlobId],
+	var
+		mediaStream = mediaStreams[mediaStreamBlobId],
 		mediaStreamRenderer = mediaStreamRenderers[video._iosrtcMediaStreamRendererId];
 
 	if (!mediaStream) {
@@ -2924,20 +2957,20 @@ function useColors() {
   // NB: In an Electron preload script, document will be defined but not fully
   // initialized. Since we know we're in Chrome, we'll just detect this case
   // explicitly
-  if (typeof window !== 'undefined' && window && typeof window.process !== 'undefined' && window.process.type === 'renderer') {
+  if (typeof window !== 'undefined' && window.process && window.process.type === 'renderer') {
     return true;
   }
 
   // is webkit? http://stackoverflow.com/a/16459606/376773
   // document is undefined in react-native: https://github.com/facebook/react-native/pull/1632
-  return (typeof document !== 'undefined' && document && 'WebkitAppearance' in document.documentElement.style) ||
+  return (typeof document !== 'undefined' && document.documentElement && document.documentElement.style && document.documentElement.style.WebkitAppearance) ||
     // is firebug? http://stackoverflow.com/a/398120/376773
-    (typeof window !== 'undefined' && window && window.console && (console.firebug || (console.exception && console.table))) ||
+    (typeof window !== 'undefined' && window.console && (window.console.firebug || (window.console.exception && window.console.table))) ||
     // is firefox >= v31?
     // https://developer.mozilla.org/en-US/docs/Tools/Web_Console#Styling_messages
-    (typeof navigator !== 'undefined' && navigator && navigator.userAgent && navigator.userAgent.toLowerCase().match(/firefox\/(\d+)/) && parseInt(RegExp.$1, 10) >= 31) ||
+    (typeof navigator !== 'undefined' && navigator.userAgent && navigator.userAgent.toLowerCase().match(/firefox\/(\d+)/) && parseInt(RegExp.$1, 10) >= 31) ||
     // double check webkit in userAgent just in case we are in a worker
-    (typeof navigator !== 'undefined' && navigator && navigator.userAgent && navigator.userAgent.toLowerCase().match(/applewebkit\/(\d+)/));
+    (typeof navigator !== 'undefined' && navigator.userAgent && navigator.userAgent.toLowerCase().match(/applewebkit\/(\d+)/));
 }
 
 /**
@@ -3213,7 +3246,7 @@ function enable(namespaces) {
   exports.names = [];
   exports.skips = [];
 
-  var split = (namespaces || '').split(/[\s,]+/);
+  var split = (typeof namespaces === 'string' ? namespaces : '').split(/[\s,]+/);
   var len = split.length;
 
   for (var i = 0; i < len; i++) {
@@ -3310,11 +3343,11 @@ function coerce(val) {
  * Helpers.
  */
 
-var s = 1000
-var m = s * 60
-var h = m * 60
-var d = h * 24
-var y = d * 365.25
+var s = 1000;
+var m = s * 60;
+var h = m * 60;
+var d = h * 24;
+var y = d * 365.25;
 
 /**
  * Parse or format the given `val`.
@@ -3324,24 +3357,25 @@ var y = d * 365.25
  *  - `long` verbose formatting [false]
  *
  * @param {String|Number} val
- * @param {Object} options
+ * @param {Object} [options]
  * @throws {Error} throw an error if val is not a non-empty string or a number
  * @return {String|Number}
  * @api public
  */
 
-module.exports = function (val, options) {
-  options = options || {}
-  var type = typeof val
+module.exports = function(val, options) {
+  options = options || {};
+  var type = typeof val;
   if (type === 'string' && val.length > 0) {
-    return parse(val)
+    return parse(val);
   } else if (type === 'number' && isNaN(val) === false) {
-    return options.long ?
-			fmtLong(val) :
-			fmtShort(val)
+    return options.long ? fmtLong(val) : fmtShort(val);
   }
-  throw new Error('val is not a non-empty string or a valid number. val=' + JSON.stringify(val))
-}
+  throw new Error(
+    'val is not a non-empty string or a valid number. val=' +
+      JSON.stringify(val)
+  );
+};
 
 /**
  * Parse the given `str` and return milliseconds.
@@ -3352,53 +3386,55 @@ module.exports = function (val, options) {
  */
 
 function parse(str) {
-  str = String(str)
-  if (str.length > 10000) {
-    return
+  str = String(str);
+  if (str.length > 100) {
+    return;
   }
-  var match = /^((?:\d+)?\.?\d+) *(milliseconds?|msecs?|ms|seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h|days?|d|years?|yrs?|y)?$/i.exec(str)
+  var match = /^((?:\d+)?\.?\d+) *(milliseconds?|msecs?|ms|seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h|days?|d|years?|yrs?|y)?$/i.exec(
+    str
+  );
   if (!match) {
-    return
+    return;
   }
-  var n = parseFloat(match[1])
-  var type = (match[2] || 'ms').toLowerCase()
+  var n = parseFloat(match[1]);
+  var type = (match[2] || 'ms').toLowerCase();
   switch (type) {
     case 'years':
     case 'year':
     case 'yrs':
     case 'yr':
     case 'y':
-      return n * y
+      return n * y;
     case 'days':
     case 'day':
     case 'd':
-      return n * d
+      return n * d;
     case 'hours':
     case 'hour':
     case 'hrs':
     case 'hr':
     case 'h':
-      return n * h
+      return n * h;
     case 'minutes':
     case 'minute':
     case 'mins':
     case 'min':
     case 'm':
-      return n * m
+      return n * m;
     case 'seconds':
     case 'second':
     case 'secs':
     case 'sec':
     case 's':
-      return n * s
+      return n * s;
     case 'milliseconds':
     case 'millisecond':
     case 'msecs':
     case 'msec':
     case 'ms':
-      return n
+      return n;
     default:
-      return undefined
+      return undefined;
   }
 }
 
@@ -3412,18 +3448,18 @@ function parse(str) {
 
 function fmtShort(ms) {
   if (ms >= d) {
-    return Math.round(ms / d) + 'd'
+    return Math.round(ms / d) + 'd';
   }
   if (ms >= h) {
-    return Math.round(ms / h) + 'h'
+    return Math.round(ms / h) + 'h';
   }
   if (ms >= m) {
-    return Math.round(ms / m) + 'm'
+    return Math.round(ms / m) + 'm';
   }
   if (ms >= s) {
-    return Math.round(ms / s) + 's'
+    return Math.round(ms / s) + 's';
   }
-  return ms + 'ms'
+  return ms + 'ms';
 }
 
 /**
@@ -3439,7 +3475,7 @@ function fmtLong(ms) {
     plural(ms, h, 'hour') ||
     plural(ms, m, 'minute') ||
     plural(ms, s, 'second') ||
-    ms + ' ms'
+    ms + ' ms';
 }
 
 /**
@@ -3448,12 +3484,12 @@ function fmtLong(ms) {
 
 function plural(ms, n, name) {
   if (ms < n) {
-    return
+    return;
   }
   if (ms < n * 1.5) {
-    return Math.floor(ms / n) + ' ' + name
+    return Math.floor(ms / n) + ' ' + name;
   }
-  return Math.ceil(ms / n) + ' ' + name + 's'
+  return Math.ceil(ms / n) + ' ' + name + 's';
 }
 
 },{}],21:[function(_dereq_,module,exports){
@@ -3627,6 +3663,10 @@ process.off = noop;
 process.removeListener = noop;
 process.removeAllListeners = noop;
 process.emit = noop;
+process.prependListener = noop;
+process.prependOnceListener = noop;
+
+process.listeners = function (name) { return [] }
 
 process.binding = function (name) {
     throw new Error('process.binding is not supported');
