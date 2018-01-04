@@ -878,8 +878,10 @@ class iosrtcPlugin : CDVPlugin {
         var localId:String?
         var pcId:Int?
         for (id, _) in self.pluginRTCPeerConnections {
-            localId = String(describing: self.pluginRTCPeerConnections[id]!.rtcPeerConnection.localStreams[0])
-            pcId = id
+            if self.pluginRTCPeerConnections[id]!.rtcPeerConnection.localStreams.count >= 1 {
+                localId = String(describing: self.pluginRTCPeerConnections[id]!.rtcPeerConnection.localStreams[0])
+                pcId = id
+            }
         }
 
         var localVideoId:String?
