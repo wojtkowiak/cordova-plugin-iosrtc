@@ -742,6 +742,10 @@ MediaStreamRenderer.prototype.refresh = function () {
 			break;
 	}
 
+	// fix for iOS 11 sdk wrong float parser
+	videoViewWidth = Math.round(videoViewWidth);
+	videoViewHeight = Math.round(videoViewHeight);
+
 	nativeRefresh.call(this);
 
 	function nativeRefresh() {
