@@ -76,6 +76,17 @@ class PluginMediaStreamRenderer : NSObject, RTCEAGLVideoViewDelegate {
 		if self.rtcVideoTrack != nil {
 			self.rtcVideoTrack!.add(self.videoView)
 		}
+
+		// OVERRIDE: overrides the default EARPIECE setting when the audio-video is rendered - SHANE
+		let audioSession = AVAudioSession.sharedInstance()
+		print("setting audioSession to SPEAKER... ")
+		do {
+			try audioSession.overrideOutputAudioPort(AVAudioSessionPortOverride.speaker)
+		} catch {
+			print("ERROR setting audioSession to SPEAKER")
+		}
+		// END OVERRIDE
+
 	}
 
 
