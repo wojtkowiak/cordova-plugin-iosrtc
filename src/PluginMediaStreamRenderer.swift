@@ -77,15 +77,10 @@ class PluginMediaStreamRenderer : NSObject, RTCEAGLVideoViewDelegate {
 			self.rtcVideoTrack!.add(self.videoView)
 		}
 
-		// OVERRIDE: overrides the default EARPIECE setting when the audio-video is rendered - SHANE
-		let audioSession = AVAudioSession.sharedInstance()
-		print("setting audioSession to SPEAKER... ")
-		do {
-			try audioSession.overrideOutputAudioPort(AVAudioSessionPortOverride.speaker)
-		} catch {
-			print("ERROR setting audioSession to SPEAKER")
-		}
-		// END OVERRIDE
+        
+       self.listenForUnpluggedHeadphones()  // OVERRIDE : Checks if headphones are connected and creates an event listener to re-set to the
+                                            // louder SPEAKER setting (rather than the quiter EARPIECE setting) if headphones are unplugged or to
+                                            // NONE (defalt setting allowing headphones) if headphones are plugged in - SHANE
 
 	}
 
@@ -263,5 +258,57 @@ class PluginMediaStreamRenderer : NSObject, RTCEAGLVideoViewDelegate {
 			]
 		])
 	}
+    
+    //OVERRIDE
+    // Checks if headphones are connected and creates an event listener to re-set to the
+    // louder SPEAKER setting (rather thant he quiter EARPIECE) if headphones are unplugged or to
+    // NONE (defalt setting allowing headphones) if headphones are plugged in - SHANE
+    
+    func listenForUnpluggedHeadphones() { //event listener: for looking for plugged or un-plugged headphones
+        NotificationCenter.default.addObserver(self,
+                                               selector: #selector(checkForUnpluggedHeadphones),
+                                               name: .AVAudioSessionRouteChange,
+                                               object: AVAudioSession.sharedInstance())
+    }
+    
+    func checkForUnpluggedHeadphones(notification: NSNotification) {
+        guard let userInfo = notification.userInfo,
+            let reasonValue = userInfo[AVAudioSessionRouteChangeReasonKey] as? UInt,
+            let reason = AVAudioSessionRouteChangeReason(rawValue:reasonValue) else {
+                return
+        }
+        switch reason {
+        case .newDeviceAvailable:
+            let session = AVAudioSession.sharedInstance()
+            for output in session.currentRoute.outputs where output.portType == AVAudioSessionPortHeadphones {
+                // headphonesConnected == true
+                let audioSession = AVAudioSession.sharedInstance()
+                print("setting audioSession to NONE (defalt allowing headphones)... ")
+                do {
+                    try audioSession.overrideOutputAudioPort(AVAudioSessionPortOverride.none)
+                } catch {
+                    print("ERROR setting audioSession to NONE")
+                }
+            }
+        case .oldDeviceUnavailable:
+            if let previousRoute =
+                userInfo[AVAudioSessionRouteChangePreviousRouteKey] as? AVAudioSessionRouteDescription {
+                for output in previousRoute.outputs where output.portType == AVAudioSessionPortHeadphones {
+                    // headphonesConnected == false
+                    
+                    // OVERRIDES the default quiter EARPIECE setting when the headphones are disconnected
+                    let audioSession = AVAudioSession.sharedInstance()
+                    print("setting audioSession to SPEAKER... ")
+                    do {
+                        try audioSession.overrideOutputAudioPort(AVAudioSessionPortOverride.speaker)
+                    } catch {
+                        print("ERROR setting audioSession to SPEAKER")
+                    }
+                }
+            }
+        default: ()
+        }
+    }//END checkForUnpluggedHeadphones
+    //END OVERRIDE
 
 }
