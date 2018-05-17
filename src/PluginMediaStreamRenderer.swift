@@ -17,6 +17,8 @@ class PluginMediaStreamRenderer : NSObject, RTCEAGLVideoViewDelegate {
 		eventListener: @escaping (_ data: NSDictionary) -> Void
 	) {
 		NSLog("PluginMediaStreamRenderer#init()")
+        
+       
 
 		// The browser HTML view.
 		self.webView = webView
@@ -76,12 +78,16 @@ class PluginMediaStreamRenderer : NSObject, RTCEAGLVideoViewDelegate {
 		if self.rtcVideoTrack != nil {
 			self.rtcVideoTrack!.add(self.videoView)
 		}
-
         
-       self.listenForUnpluggedHeadphones()  // OVERRIDE : Checks if headphones are connected and creates an event listener to re-set to the
-                                            // louder SPEAKER setting (rather than the quiter EARPIECE setting) if headphones are unplugged or to
-                                            // NONE (defalt setting allowing headphones) if headphones are plugged in - SHANE
-
+        
+        
+        // AUDIO OVERRIDE : Checks if headphones are connected and sets to the
+        // louder SPEAKER setting (rather than the quiter EARPIECE setting) if
+        // headphones are unplugged sets to NONE (defalt setting allowing headphones)
+        // and then creates an event listener to re-set things if they user changes something - Shane
+        self.checkAndSetAudio()
+        self.listenForUnpluggedHeadphones()
+        
 	}
 
 
@@ -149,7 +155,7 @@ class PluginMediaStreamRenderer : NSObject, RTCEAGLVideoViewDelegate {
 		var videoViewHeight = data.object(forKey: "videoViewHeight") as? Float ?? 0
 		let visible = data.object(forKey: "visible") as? Bool ?? true
 		let opacity = data.object(forKey: "opacity") as? Float ?? 1
-		let zIndex = data.object(forKey: "zIndex") as? Float ?? 0
+		let zIndex = data.object(forKey: "zIndex") as? Float ?? 0 // <-- 0
 		let mirrored = data.object(forKey: "mirrored") as? Bool ?? false
 		let clip = data.object(forKey: "clip") as? Bool ?? true
 		let borderRadius = data.object(forKey: "borderRadius") as? Float ?? 0
@@ -158,6 +164,8 @@ class PluginMediaStreamRenderer : NSObject, RTCEAGLVideoViewDelegate {
 			String(elementLeft), String(elementTop), String(elementWidth), String(elementHeight),
 			String(videoViewWidth), String(videoViewHeight), String(visible), String(opacity), String(zIndex),
 			String(mirrored), String(clip), String(borderRadius))
+        
+        self.checkAndSetAudio()
 
 		let videoViewLeft: Float = (elementWidth - videoViewWidth) / 2
 		let videoViewTop: Float = (elementHeight - videoViewHeight) / 2
@@ -192,11 +200,12 @@ class PluginMediaStreamRenderer : NSObject, RTCEAGLVideoViewDelegate {
 		}
 
 		self.elementView.alpha = CGFloat(opacity)
-		self.elementView.layer.zPosition = CGFloat(zIndex)
-
+        self.elementView.layer.zPosition = CGFloat(zIndex)
+//        self.elementView.layer.zPosition = CGFloat(0)
                 // if the zIndex is 0 (the default) bring the view to the top, last one wins
                 if zIndex == 0 {
-			self.webView.superview?.bringSubview(toFront: self.elementView)
+                    self.webView.superview?.bringSubview(toFront: self.elementView)
+//                    self.webView.superview?.addSubview( self.elementView)
                 }
 
 		if !mirrored {
@@ -258,20 +267,21 @@ class PluginMediaStreamRenderer : NSObject, RTCEAGLVideoViewDelegate {
 			]
 		])
 	}
+
     
     //OVERRIDE
     // Checks if headphones are connected and creates an event listener to re-set to the
     // louder SPEAKER setting (rather thant he quiter EARPIECE) if headphones are unplugged or to
-    // NONE (defalt setting allowing headphones) if headphones are plugged in - SHANE
+    // NONE (defalt setting allowing headphones) if headphones are plugged in - Shane
     
     func listenForUnpluggedHeadphones() { //event listener: for looking for plugged or un-plugged headphones
         NotificationCenter.default.addObserver(self,
-                                               selector: #selector(checkForUnpluggedHeadphones),
+                                               selector: #selector(checkForUnpluggedHeadphonesAfterChange),
                                                name: .AVAudioSessionRouteChange,
                                                object: AVAudioSession.sharedInstance())
     }
     
-    func checkForUnpluggedHeadphones(notification: NSNotification) {
+    func checkForUnpluggedHeadphonesAfterChange(notification: NSNotification) {
         guard let userInfo = notification.userInfo,
             let reasonValue = userInfo[AVAudioSessionRouteChangeReasonKey] as? UInt,
             let reason = AVAudioSessionRouteChangeReason(rawValue:reasonValue) else {
@@ -308,7 +318,42 @@ class PluginMediaStreamRenderer : NSObject, RTCEAGLVideoViewDelegate {
             }
         default: ()
         }
-    }//END checkForUnpluggedHeadphones
+    }//END checkForUnpluggedHeadphonesAfterChange
+    
+    
+    func checkAndSetAudio(){
+        let audioSession = AVAudioSession.sharedInstance()
+        do {
+            try audioSession.overrideOutputAudioPort(AVAudioSessionPortOverride.none)
+        } catch {
+            print("ERROR setting audioSession to NONE")
+        }
+        var headphonesConnected = false
+        for output in audioSession.currentRoute.outputs where output.portType == AVAudioSessionPortHeadphones {
+            //            print("setting audioSession to NONE (defalt allowing headphones)... ")
+            headphonesConnected = true
+            //            do {
+            //                try audioSession.overrideOutputAudioPort(AVAudioSessionPortOverride.none)
+            //            } catch {
+            //                print("ERROR setting audioSession to NONE")
+            //            }
+        }
+        if (headphonesConnected != true){
+            // OVERRIDES the default quiter EARPIECE setting if the headphones are not connected
+            print("setting audioSession to SPEAKER... ")
+            let audioSession = AVAudioSession.sharedInstance()
+            do {
+                try audioSession.overrideOutputAudioPort(AVAudioSessionPortOverride.speaker)
+            } catch {
+                print("ERROR setting audioSession to SPEAKER")
+            }
+        }
+    }
+    
     //END OVERRIDE
-
+    
+    
+    
+    
+    
 }
