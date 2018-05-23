@@ -79,8 +79,11 @@ class PluginMediaStreamRenderer : NSObject, RTCEAGLVideoViewDelegate {
 			self.rtcVideoTrack!.add(self.videoView)
 		}
         
-        
-        
+        // SCREEN TIMEOUT OVERRIDE : blocks the screen time-out settings on the phone from putting
+        // the phone to sleep during an active A/V session. This is un-set in the close()
+        // function below.
+        UIApplication.shared.isIdleTimerDisabled = true
+
         // AUDIO OVERRIDE : Checks if headphones are connected and sets to the
         // louder SPEAKER setting (rather than the quiter EARPIECE setting) if
         // headphones are unplugged sets to NONE (defalt setting allowing headphones)
@@ -225,8 +228,8 @@ class PluginMediaStreamRenderer : NSObject, RTCEAGLVideoViewDelegate {
 
 
 	func close() {
-		NSLog("PluginMediaStreamRenderer#close()")
-
+		NSLog("PluginMediaStreamRenderer#close() AND UNSETTING OVERRIDES")
+		self.unsetOverrides()
 		self.reset()
 		self.elementView.removeFromSuperview()
 	}
@@ -267,9 +270,9 @@ class PluginMediaStreamRenderer : NSObject, RTCEAGLVideoViewDelegate {
 			]
 		])
 	}
-
+	
     
-    //OVERRIDE
+    //OVERRIDES
     // Checks if headphones are connected and creates an event listener to re-set to the
     // louder SPEAKER setting (rather thant he quiter EARPIECE) if headphones are unplugged or to
     // NONE (defalt setting allowing headphones) if headphones are plugged in - Shane
@@ -323,21 +326,13 @@ class PluginMediaStreamRenderer : NSObject, RTCEAGLVideoViewDelegate {
     
     func checkAndSetAudio(){
         let audioSession = AVAudioSession.sharedInstance()
-        do {
-            try audioSession.overrideOutputAudioPort(AVAudioSessionPortOverride.none)
-        } catch {
-            print("ERROR setting audioSession to NONE")
-        }
-        var headphonesConnected = false
+		var headphonesConnected = false
+		
+		// testing for headphones connected
         for output in audioSession.currentRoute.outputs where output.portType == AVAudioSessionPortHeadphones {
-            //            print("setting audioSession to NONE (defalt allowing headphones)... ")
             headphonesConnected = true
-            //            do {
-            //                try audioSession.overrideOutputAudioPort(AVAudioSessionPortOverride.none)
-            //            } catch {
-            //                print("ERROR setting audioSession to NONE")
-            //            }
         }
+
         if (headphonesConnected != true){
             // OVERRIDES the default quiter EARPIECE setting if the headphones are not connected
             print("setting audioSession to SPEAKER... ")
@@ -347,13 +342,32 @@ class PluginMediaStreamRenderer : NSObject, RTCEAGLVideoViewDelegate {
             } catch {
                 print("ERROR setting audioSession to SPEAKER")
             }
-        }
+        } else {
+			let audioSession = AVAudioSession.sharedInstance()
+			do {
+				try audioSession.overrideOutputAudioPort(AVAudioSessionPortOverride.none)
+			} catch {
+				print("ERROR setting audioSession to NONE")
+			}
+		}
     }
-    
-    //END OVERRIDE
-    
-    
-    
-    
+
+	func unsetOverrides(){
+		// UNSETING OVERRIDES: Let's the phone's screen time-out settings take over normally,
+        // since the A/V session is over now and we don't need to block it anymore. Also puts the
+		// audio settings back to NONE
+
+        UIApplication.shared.isIdleTimerDisabled = false
+
+		let audioSession = AVAudioSession.sharedInstance()
+		print("setting audioSession to NONE (defalt settings restored)... ")
+		do {
+			try audioSession.overrideOutputAudioPort(AVAudioSessionPortOverride.none)
+		} catch {
+			print("ERROR setting audioSession to NONE")
+		}
+	}
+	 
+    //END OVERRIDES
     
 }
