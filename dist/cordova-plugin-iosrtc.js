@@ -2,7 +2,7 @@
  * cordova-plugin-iosrtc v4.0.2
  * Cordova iOS plugin exposing the full WebRTC W3C JavaScript APIs
  * Copyright 2015-2017 eFace2Face, Inc. (https://eface2face.com)
- * Copyright 2017 BasqueVoIPMafia (https://github.com/BasqueVoIPMafia)
+ * Copyright 2017-2018 BasqueVoIPMafia (https://github.com/BasqueVoIPMafia)
  * License MIT
  */
 
@@ -2499,7 +2499,9 @@ module.exports = {
 	debug:                 _dereq_('debug'),
 
 	// Debug function to see what happens internally.
-	dump:                  dump
+	dump:                  dump,
+
+	freeCamera:            freeCamera
 };
 
 
@@ -2550,6 +2552,10 @@ function registerGlobals() {
 
 function dump() {
 	exec(null, null, 'iosrtcPlugin', 'dump', []);
+}
+
+function freeCamera() {
+	exec(null, null, 'iosrtcPlugin', 'freeCamera', []);
 }
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})

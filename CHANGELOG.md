@@ -1,3 +1,7 @@
+#### Version 4.0.3
+
+* Added `freeCamera` function. Can be called when peer connections are closed  
+
 #### Version 4.0.2
 
 * `getUserMedia` constraints: Allow `sourceId` (rather than just `deviceId`) to make adapter.js happy (#282).

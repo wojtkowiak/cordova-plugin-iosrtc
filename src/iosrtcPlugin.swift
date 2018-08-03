@@ -872,6 +872,53 @@ class iosrtcPlugin : CDVPlugin {
 		}
 	}
 
+	func freeCamera(_ command: CDVInvokedUrlCommand) {
+        NSLog("iosrtcPlugin#freeCamera()")
+
+        var localId:String?
+        var pcId:Int?
+        for (id, _) in self.pluginRTCPeerConnections {
+            if self.pluginRTCPeerConnections[id]!.rtcPeerConnection.localStreams.count >= 1 {
+                localId = String(describing: self.pluginRTCPeerConnections[id]!.rtcPeerConnection.localStreams[0])
+                pcId = id
+            }
+        }
+
+        if localId == nil {
+            return;
+        }
+
+        var localVideoId:String?
+        var localAudioId:String?
+        var streamId:String?
+        for (id, pluginMediaStream) in self.pluginMediaStreams {
+            NSLog("- PluginMediaStream %@", String(pluginMediaStream.rtcMediaStream.description))
+            if(String(pluginMediaStream.rtcMediaStream.description) == localId) {
+                localVideoId = self.pluginMediaStreams[id]!.videoTracks.values.first?.id
+                localAudioId = self.pluginMediaStreams[id]!.audioTracks.values.first?.id
+                streamId = id
+            }
+        }
+
+        if(self.pluginMediaStreams.count < 1 || self.pluginMediaStreamTracks.count < 1 || self.pluginMediaStreams.count < 1 || streamId == nil) {
+            return;
+        }
+
+        if let yourStream = self.pluginMediaStreams[streamId!]?.rtcMediaStream {
+            if let yourAudioTrack = self.pluginMediaStreamTracks[localAudioId!]?.rtcMediaStreamTrack {
+                yourStream.removeAudioTrack(yourAudioTrack as! RTCAudioTrack)
+            }
+            if let yourVideoTrack = self.pluginMediaStreamTracks[localVideoId!]?.rtcMediaStreamTrack {
+                yourStream.removeVideoTrack(yourVideoTrack as! RTCVideoTrack)
+            }
+        }
+        if let yourPC = self.pluginRTCPeerConnections[pcId!]?.rtcPeerConnection {
+            if let yourMediaStream = self.pluginMediaStreams[streamId!]?.rtcMediaStream {
+                yourPC.remove(yourMediaStream as! RTCMediaStream)
+            }
+        }
+    }
+
 
 	/**
 	 * Private API.
