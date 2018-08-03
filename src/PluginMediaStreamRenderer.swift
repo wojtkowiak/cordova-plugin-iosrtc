@@ -17,6 +17,8 @@ class PluginMediaStreamRenderer : NSObject, RTCEAGLVideoViewDelegate {
 		eventListener: @escaping (_ data: NSDictionary) -> Void
 	) {
 		NSLog("PluginMediaStreamRenderer#init()")
+        
+       
 
 		// The browser HTML view.
 		self.webView = webView
@@ -76,6 +78,19 @@ class PluginMediaStreamRenderer : NSObject, RTCEAGLVideoViewDelegate {
 		if self.rtcVideoTrack != nil {
 			self.rtcVideoTrack!.add(self.videoView)
 		}
+        
+        // SCREEN TIMEOUT OVERRIDE : blocks the screen time-out settings on the phone from putting
+        // the phone to sleep during an active A/V session. This is un-set in the close()
+        // function below.
+        UIApplication.shared.isIdleTimerDisabled = true
+
+        // AUDIO OVERRIDE : Checks if headphones are connected and sets to the
+        // louder SPEAKER setting (rather than the quiter EARPIECE setting) if
+        // headphones are unplugged sets to NONE (defalt setting allowing headphones)
+        // and then creates an event listener to re-set things if they user changes something - Shane
+        self.checkAndSetAudio()
+        self.listenForUnpluggedHeadphones()
+        
 	}
 
 
@@ -143,7 +158,7 @@ class PluginMediaStreamRenderer : NSObject, RTCEAGLVideoViewDelegate {
 		var videoViewHeight = data.object(forKey: "videoViewHeight") as? Float ?? 0
 		let visible = data.object(forKey: "visible") as? Bool ?? true
 		let opacity = data.object(forKey: "opacity") as? Float ?? 1
-		let zIndex = data.object(forKey: "zIndex") as? Float ?? 0
+		let zIndex = data.object(forKey: "zIndex") as? Float ?? 0 // <-- 0
 		let mirrored = data.object(forKey: "mirrored") as? Bool ?? false
 		let clip = data.object(forKey: "clip") as? Bool ?? true
 		let borderRadius = data.object(forKey: "borderRadius") as? Float ?? 0
@@ -152,6 +167,8 @@ class PluginMediaStreamRenderer : NSObject, RTCEAGLVideoViewDelegate {
 			String(elementLeft), String(elementTop), String(elementWidth), String(elementHeight),
 			String(videoViewWidth), String(videoViewHeight), String(visible), String(opacity), String(zIndex),
 			String(mirrored), String(clip), String(borderRadius))
+        
+        self.checkAndSetAudio()
 
 		let videoViewLeft: Float = (elementWidth - videoViewWidth) / 2
 		let videoViewTop: Float = (elementHeight - videoViewHeight) / 2
@@ -186,11 +203,12 @@ class PluginMediaStreamRenderer : NSObject, RTCEAGLVideoViewDelegate {
 		}
 
 		self.elementView.alpha = CGFloat(opacity)
-		self.elementView.layer.zPosition = CGFloat(zIndex)
-
+        self.elementView.layer.zPosition = CGFloat(zIndex)
+//        self.elementView.layer.zPosition = CGFloat(0)
                 // if the zIndex is 0 (the default) bring the view to the top, last one wins
                 if zIndex == 0 {
-			self.webView.superview?.bringSubview(toFront: self.elementView)
+                    self.webView.superview?.bringSubview(toFront: self.elementView)
+//                    self.webView.superview?.addSubview( self.elementView)
                 }
 
 		if !mirrored {
@@ -210,8 +228,8 @@ class PluginMediaStreamRenderer : NSObject, RTCEAGLVideoViewDelegate {
 
 
 	func close() {
-		NSLog("PluginMediaStreamRenderer#close()")
-
+		NSLog("PluginMediaStreamRenderer#close() AND UNSETTING OVERRIDES")
+		self.unsetOverrides()
 		self.reset()
 		self.elementView.removeFromSuperview()
 	}
@@ -252,5 +270,104 @@ class PluginMediaStreamRenderer : NSObject, RTCEAGLVideoViewDelegate {
 			]
 		])
 	}
+	
+    
+    //OVERRIDES
+    // Checks if headphones are connected and creates an event listener to re-set to the
+    // louder SPEAKER setting (rather thant he quiter EARPIECE) if headphones are unplugged or to
+    // NONE (defalt setting allowing headphones) if headphones are plugged in - Shane
+    
+    func listenForUnpluggedHeadphones() { //event listener: for looking for plugged or un-plugged headphones
+        NotificationCenter.default.addObserver(self,
+                                               selector: #selector(checkForUnpluggedHeadphonesAfterChange),
+                                               name: .AVAudioSessionRouteChange,
+                                               object: AVAudioSession.sharedInstance())
+    }
+    
+    func checkForUnpluggedHeadphonesAfterChange(notification: NSNotification) {
+        guard let userInfo = notification.userInfo,
+            let reasonValue = userInfo[AVAudioSessionRouteChangeReasonKey] as? UInt,
+            let reason = AVAudioSessionRouteChangeReason(rawValue:reasonValue) else {
+                return
+        }
+        switch reason {
+        case .newDeviceAvailable:
+            let session = AVAudioSession.sharedInstance()
+            for output in session.currentRoute.outputs where output.portType == AVAudioSessionPortHeadphones {
+                // headphonesConnected == true
+                let audioSession = AVAudioSession.sharedInstance()
+                print("setting audioSession to NONE (defalt allowing headphones)... ")
+                do {
+                    try audioSession.overrideOutputAudioPort(AVAudioSessionPortOverride.none)
+                } catch {
+                    print("ERROR setting audioSession to NONE")
+                }
+            }
+        case .oldDeviceUnavailable:
+            if let previousRoute =
+                userInfo[AVAudioSessionRouteChangePreviousRouteKey] as? AVAudioSessionRouteDescription {
+                for output in previousRoute.outputs where output.portType == AVAudioSessionPortHeadphones {
+                    // headphonesConnected == false
+                    
+                    // OVERRIDES the default quiter EARPIECE setting when the headphones are disconnected
+                    let audioSession = AVAudioSession.sharedInstance()
+                    print("setting audioSession to SPEAKER... ")
+                    do {
+                        try audioSession.overrideOutputAudioPort(AVAudioSessionPortOverride.speaker)
+                    } catch {
+                        print("ERROR setting audioSession to SPEAKER")
+                    }
+                }
+            }
+        default: ()
+        }
+    }//END checkForUnpluggedHeadphonesAfterChange
+    
+    
+    func checkAndSetAudio(){
+        let audioSession = AVAudioSession.sharedInstance()
+		var headphonesConnected = false
+		
+		// testing for headphones connected
+        for output in audioSession.currentRoute.outputs where output.portType == AVAudioSessionPortHeadphones {
+            headphonesConnected = true
+        }
 
+        if (headphonesConnected != true){
+            // OVERRIDES the default quiter EARPIECE setting if the headphones are not connected
+            print("setting audioSession to SPEAKER... ")
+            let audioSession = AVAudioSession.sharedInstance()
+            do {
+                try audioSession.overrideOutputAudioPort(AVAudioSessionPortOverride.speaker)
+            } catch {
+                print("ERROR setting audioSession to SPEAKER")
+            }
+        } else {
+			let audioSession = AVAudioSession.sharedInstance()
+			do {
+				try audioSession.overrideOutputAudioPort(AVAudioSessionPortOverride.none)
+			} catch {
+				print("ERROR setting audioSession to NONE")
+			}
+		}
+    }
+
+	func unsetOverrides(){
+		// UNSETING OVERRIDES: Let's the phone's screen time-out settings take over normally,
+        // since the A/V session is over now and we don't need to block it anymore. Also puts the
+		// audio settings back to NONE
+
+        UIApplication.shared.isIdleTimerDisabled = false
+
+		let audioSession = AVAudioSession.sharedInstance()
+		print("setting audioSession to NONE (defalt settings restored)... ")
+		do {
+			try audioSession.overrideOutputAudioPort(AVAudioSessionPortOverride.none)
+		} catch {
+			print("ERROR setting audioSession to NONE")
+		}
+	}
+	 
+    //END OVERRIDES
+    
 }
